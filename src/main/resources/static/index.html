@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MyDay AI</title>
+  <style>
+  body{font-family:Inter,Arial,Helvetica,sans-serif;max-width:900px;margin:24px auto;padding:0 16px;background:#f7f9fc}
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  h1{margin:.2rem 0;font-size:1.6rem}
+  .meta{color:#6b7280}
+  .task{background:#fff;border:1px solid #e6e9ee;padding:12px;margin:10px 0;border-radius:10px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 3px rgba(16,24,40,0.03)}
+  .task .left{max-width:75%}
+  .priority-high{color:#b91c1c;font-weight:600}
+  .priority-medium{color:#b45309;font-weight:600}
+  .priority-low{color:#065f46;font-weight:600}
+  button{margin-left:8px;padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer}
+  button.primary{background:#2563eb;color:#fff;border-color:#2563eb}
+  form{margin-top:16px;background:#fff;padding:12px;border-radius:8px;border:1px solid #e6e9ee}
+  label{display:block;margin:8px 0 4px;font-size:0.9rem}
+  input,textarea,select{width:100%;padding:8px;box-sizing:border-box;border:1px solid #d1d5db;border-radius:6px}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>MyDay AI</h1>
+      <div class="meta" id="listLabel">Task List</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <select id="taskView" aria-label="Task view">
+        <option value="all">All Tasks</option>
+        <option value="today">Today Only</option>
+      </select>
+      <a href="/api/tasks" target="_blank">/api/tasks</a>
+    </div>
+  </header>
+
+  <section id="tasks">
+  </section>
+
+  <form id="addTaskForm">
+    <h2>Add Task</h2>
+    <label for="title">Title</label>
+    <input id="title" name="title" required maxlength="200" />
+
+    <label for="description">Description</label>
+    <textarea id="description" name="description" rows="3" maxlength="2000"></textarea>
+
+    <label for="dueDate">Due date</label>
+    <input id="dueDate" name="dueDate" type="date" />
+
+    <label for="priority">Priority</label>
+    <select id="priority" name="priority">
+      <option value="LOW">LOW</option>
+      <option value="MEDIUM" selected>MEDIUM</option>
+      <option value="HIGH">HIGH</option>
+    </select>
+
+    <label for="estimatedMinutes">Estimated minutes</label>
+    <input id="estimatedMinutes" name="estimatedMinutes" type="number" min="0" />
+
+    <div style="margin-top:8px;display:flex;align-items:center;gap:12px">
+      <button id="addTaskBtn" type="submit">Add Task</button>
+      <div id="formError" style="color:#b91c1c;font-size:0.95rem"></div>
+    </div>
+  </form>
+
+<script>
+async function loadTasks(){
+  const container = document.getElementById('tasks');
+  const mode = document.getElementById('taskView')?.value || 'all';
+  const label = document.getElementById('listLabel');
+  if(label){ label.textContent = mode === 'today' ? "Today's Tasks" : 'Task List'; }
+
+  try{
+    const endpoint = mode === 'today' ? '/api/tasks/today' : '/api/tasks';
+    const res = await fetch(endpoint);
+    if(!res.ok) throw new Error('Failed to load');
+    const tasks = await res.json();
+    renderTasks(tasks);
+  }catch(e){
+    container.innerHTML = '<p style="color:red">Could not load tasks.</p>';
+    console.error(e);
+  }
+}
+
+function renderTasks(tasks){
+  const container = document.getElementById('tasks');
+  container.innerHTML = '';
+  if(!tasks || tasks.length===0){
+    container.innerHTML = '<p>No tasks.</p>';
+    return;
+  }
+
+  const table = document.createElement('table');
+  table.style.width = '100%';
+  table.style.borderCollapse = 'collapse';
+  table.innerHTML = '<thead><tr>' +
+    '<th style="text-align:left;padding:8px;border-bottom:1px solid #e6e9ee">Title</th>' +
+    '<th style="text-align:left;padding:8px;border-bottom:1px solid #e6e9ee">Description</th>' +
+    '<th style="padding:8px;border-bottom:1px solid #e6e9ee">Due</th>' +
+    '<th style="padding:8px;border-bottom:1px solid #e6e9ee">Priority</th>' +
+    '<th style="padding:8px;border-bottom:1px solid #e6e9ee">Status</th>' +
+    '<th style="padding:8px;border-bottom:1px solid #e6e9ee">Est (min)</th>' +
+    '<th style="padding:8px;border-bottom:1px solid #e6e9ee">Actions</th>' +
+    '</tr></thead>';
+
+  const tbody = document.createElement('tbody');
+
+  tasks.forEach(t => {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td style="padding:8px;border-bottom:1px solid #f1f5f9">'+escapeHtml(t.title)+'</td>' +
+      '<td style="padding:8px;border-bottom:1px solid #f1f5f9">'+(t.description?escapeHtml(t.description):'')+'</td>' +
+      '<td style="padding:8px;border-bottom:1px solid #f1f5f9">'+(t.dueDate?formatLocal(t.dueDate):'—')+'</td>' +
+      '<td style="padding:8px;border-bottom:1px solid #f1f5f9"><span class="priority-'+(t.priority?t.priority.toLowerCase():'medium')+'">'+(t.priority||'')+'</span></td>' +
+      '<td style="padding:8px;border-bottom:1px solid #f1f5f9">'+(t.status||'')+'</td>' +
+      '<td style="padding:8px;border-bottom:1px solid #f1f5f9;text-align:center">'+(t.estimatedMinutes!=null?t.estimatedMinutes:'')+'</td>' +
+      '<td style="padding:8px;border-bottom:1px solid #f1f5f9"></td>';
+
+    const actionsTd = tr.querySelector('td:last-child');
+
+    const completeBtn = document.createElement('button');
+    completeBtn.className = 'primary';
+    completeBtn.textContent = 'Complete';
+    completeBtn.onclick = async ()=>{
+      await postJson('/api/tasks/'+t.id+'/complete');
+      await loadTasks();
+    };
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.onclick = async ()=>{
+      if(!confirm('Delete this task?')) return;
+      await fetch('/api/tasks/'+t.id, { method: 'DELETE' });
+      await loadTasks();
+    };
+
+    actionsTd.appendChild(completeBtn);
+    actionsTd.appendChild(deleteBtn);
+
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+
+async function postJson(url, body){
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  });
+  if(!res.ok){
+    let text = '';
+    try{ text = await res.text(); }catch(e){}
+    try{ const p = JSON.parse(text||'{}'); throw new Error(p.message || p.error || text || 'Request failed'); }catch(e){ throw new Error(text || 'Request failed'); }
+  }
+  return res.json();
+}
+
+function formatLocal(iso){
+  if(!iso) return '';
+  try{
+    // handle date-only strings safely
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString();
+  }catch(e){return iso}
+}
+
+function escapeHtml(s){
+  if(!s) return '';
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+
+document.getElementById('addTaskForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const errEl = document.getElementById('formError');
+  errEl.textContent = '';
+  const submitBtn = document.getElementById('addTaskBtn');
+  submitBtn.disabled = true;
+  const origText = submitBtn.textContent;
+  submitBtn.textContent = 'Adding...';
+
+  try{
+    const titleEl = document.getElementById('title');
+    const title = titleEl.value.trim();
+    if(!title){ errEl.textContent = 'Title is required'; titleEl.focus(); submitBtn.disabled = false; submitBtn.textContent = origText; return; }
+    if(title.length > 200){ errEl.textContent = 'Title must be 200 characters or fewer'; titleEl.focus(); submitBtn.disabled = false; submitBtn.textContent = origText; return; }
+
+    const description = document.getElementById('description').value.trim();
+    const dueDateInput = document.getElementById('dueDate');
+    const dueLocal = dueDateInput.value;
+    const priority = document.getElementById('priority').value;
+    const est = document.getElementById('estimatedMinutes').value;
+
+    if(est){
+      const estN = parseInt(est,10);
+      if(isNaN(estN) || estN < 0){ errEl.textContent = 'Estimated minutes must be 0 or a positive integer'; submitBtn.disabled = false; submitBtn.textContent = origText; return; }
+    }
+
+    if(dueLocal){
+      const today = new Date(); today.setHours(0,0,0,0);
+      const dueDateObj = new Date(dueLocal + 'T00:00:00');
+      if(dueDateObj < today){
+        dueDateInput.value = '';
+        errEl.textContent = 'Due date cannot be in the past';
+        submitBtn.disabled = false; submitBtn.textContent = origText; return;
+      }
+    }
+
+    const body = { title, description, priority };
+    if(dueLocal) body.dueDate = dueLocal;
+    if(est) body.estimatedMinutes = parseInt(est,10);
+
+    const res = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    if(!res.ok){
+      let text = '';
+      try{ text = await res.text(); }catch(e){}
+      let msg = 'Failed to create task';
+      try{
+        const parsed = JSON.parse(text || '{}');
+        msg = parsed.message || parsed.error || text || msg;
+      }catch(e){ msg = text || msg; }
+      if(dueDateInput) dueDateInput.value = '';
+      throw new Error(msg);
+    }
+
+    e.target.reset();
+    if(dueDateInput) dueDateInput.value = '';
+    await loadTasks();
+  }catch(err){
+    errEl.textContent = err.message || 'Could not create task';
+    console.error(err);
+  }finally{
+    submitBtn.disabled = false;
+    submitBtn.textContent = origText;
+  }
+});
+
+// set minimum selectable due date to today and clear stale invalid values
+(function setMinDueDate(){
+  const el = document.getElementById('dueDate');
+  if(!el) return;
+  const d = new Date(); d.setHours(0,0,0,0);
+  const iso = d.toISOString().slice(0,10);
+  el.min = iso;
+  if (el.value && new Date(el.value + 'T00:00:00') < d) {
+    el.value = '';
+  }
+})();
+
+document.getElementById('taskView').addEventListener('change', loadTasks);
+
+// initial load
+loadTasks();
+</script>
+</body>
+</html>
