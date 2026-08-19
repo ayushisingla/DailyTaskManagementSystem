@@ -533,3 +533,5 @@ The core idea is:
 > **LLMs interpret. Backend services execute.**
 
 This architecture allows AI capabilities to be added while maintaining conventional software-engineering principles such as separation of concerns, validation, persistence, and deterministic business logic.
+
+![img.png](img.png)
