@@ -66,6 +66,17 @@
     </div>
   </form>
 
+ <form id="aiForm" style="margin-top:16px;background:#fff;padding:12px;border-radius:8px;border:1px solid #e6e9ee">
+   <h2>AI Assistant</h2>
+   <label for="aiText">Tell the assistant (e.g. "Tomorrow I need to study Spring Security for two hours")</label>
+   <input id="aiText" name="aiText" placeholder="What do you want the assistant to do?" />
+   <div style="margin-top:8px;display:flex;align-items:center;gap:12px">
+     <button id="aiSendBtn" type="button">Send to AI</button>
+     <div id="aiStatus" style="color:#064e3b"></div>
+   </div>
+   <div id="aiOutput" style="margin-top:8px;color:#064e3b;white-space:pre-wrap"></div>
+ </form>
+
 <script>
 async function loadTasks(){
   const container = document.getElementById('tasks');
@@ -260,6 +271,75 @@ document.getElementById('taskView').addEventListener('change', loadTasks);
 
 // initial load
 loadTasks();
+
+// Prevent the AI form from submitting via Enter (which causes a page reload and skips JS submit)
+const aiFormEl = document.getElementById('aiForm');
+if (aiFormEl) aiFormEl.addEventListener('submit', function(e){ e.preventDefault(); });
+
+// Allow Enter (without Shift) in the AI text input to submit to the same handler as the Send button.
+const aiTextEl = document.getElementById('aiText');
+if (aiTextEl) {
+  aiTextEl.addEventListener('keydown', function(e){
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      // Trigger the same action as clicking the Send button
+      const btn = document.getElementById('aiSendBtn');
+      if (btn) btn.click();
+    }
+  });
+}
+
+document.getElementById('aiSendBtn').addEventListener('click', async ()=>{
+  const aiInput = document.getElementById('aiText');
+  const text = aiInput.value.trim();
+  const status = document.getElementById('aiStatus');
+  const out = document.getElementById('aiOutput');
+  status.textContent = '';
+  out.textContent = '';
+  if(!text){ status.textContent = 'Please enter a request.'; return; }
+  try{
+    status.textContent = 'Sending...';
+    const res = await fetch('/api/agent/interpret', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ text })
+    });
+    const js = await res.json();
+    if(!res.ok){
+      status.textContent = 'Error';
+      out.textContent = js?.message || js?.error || 'Something went wrong';
+      return;
+    }
+    // Treat creation as successful only when action === 'createTask'
+    if(js.action && js.action.toLowerCase() === 'createtask'){
+      await loadTasks();
+      aiInput.value = '';
+      status.textContent = 'Task created.';
+      out.textContent = '';
+    } else {
+      // Clear status/out and show only one place for messages to avoid duplication
+      out.textContent = '';
+      // If we have a matched or existing task, show details in the output area and a short status
+      if(js.existingTask){
+        status.textContent = 'No action taken.';
+        out.textContent = 'Task already exists: ' + (js.existingTask.title || js.existingTask.id);
+      } else if(js.matchedTask){
+        status.textContent = 'No action taken.';
+        out.textContent = 'Matched task: ' + (js.matchedTask.title || js.matchedTask.id) + '. ' + (js.message || '');
+      } else if(js.message){
+        // General message from backend (e.g., validation or parsing issues)
+        status.textContent = js.message;
+      } else if(js.task){
+        // fallback display (shouldn't be used for delete)
+        out.textContent = JSON.stringify(js.task, null, 2);
+        status.textContent = '';
+      } else {
+        status.textContent = 'No task created.';
+      }
+    }
+  }catch(e){
+    status.textContent = 'Error';
+    out.textContent = e.message || String(e);
+  }
+});
 </script>
 </body>
 </html>
